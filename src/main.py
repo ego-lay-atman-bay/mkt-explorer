@@ -5,12 +5,16 @@ import json
 import csv
 import logging
 from datetime import datetime
+import lxml
+from lxml import etree
 
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as filedialog
 
 import UnityPy
+
+from assetTypes import WWiseAudio
 
 UnityPyVersion = '1.9.24'
 
@@ -135,19 +139,7 @@ class Window(tk.Tk):
     
     def loadFile(this, path):
         pass
-    
-    class Audio():
-        def __init__(self, file) -> None:
-            pass
-    
-    def extractAudio(this, path):
-        os.makedirs('tmp/audio', exist_ok=True)
         
-        subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RExtractorConsole.exe", path, 'tmp/audio', this.settings['RavioliGameTools']['args']])
-        
-        
-        
-    
     # settings
     def loadSettings(this, **kwargs):
         try:
@@ -172,33 +164,9 @@ class Window(tk.Tk):
         this.settings = {
             'catalog': 'catalog.csv',
             'RavioliGameTools': {
-               'path': 'tools/RavioliGameTools_v2.10',
-               'args': '/s /sf:wav /as'
+               'path': 'tools/RavioliGameTools_v2.10'
             },
         }
-        
-        """
-        Ravioli Tools Options:
-        /subdir                   Create subdirectory for each input file
-            (short form: /s)
-        /imageformat:<extension>  Convert image format during extraction
-            (short form: /if)
-        /soundformat:<extension>  Convert sound format during extraction
-            (short form: /sf)
-        /fallbacksoundformat:<extension>  Convert to this format if conversion
-            (short form: /fsf)            to the format specified in /soundformat is
-                                          not possible
-        /extract                  Start extraction automatically and exit
-            (short form: /e)      when finished (for GUI version only)
-        /archivetype:<name>       Specify the archive type to use for extraction
-            (short form: /at)
-        /allowscanning            Allow scanning of unknown files
-            (short form: /as)
-        /rootdir:<RootDirectory>[;<RootDirectory>;...]  Specify root directories
-            (short form: /rd)
-        /help                     Show this help message
-            (short form: /?)
-        """
         
 
     def saveSettings(this):
