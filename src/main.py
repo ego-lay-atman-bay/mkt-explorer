@@ -62,6 +62,7 @@ class Window(tk.Tk):
         # print(this.style.theme_names())
         # this.style.theme_use('winnative')
         
+        this.settingsFile = 'settings.json'
         this.loadSettings()
         this.loadCatalog()
         
@@ -95,6 +96,7 @@ class Window(tk.Tk):
         this.config(menu=this.menuBar)
 
         this.fileMenu = tk.Menu(this.menuBar, tearoff=0)
+        this.fileMenu.add_command(label= 'Load Catalog')
         this.fileMenu.add_command(label= 'Load File')
         this.fileMenu.add_command(label= 'Load Folder')
         this.fileMenu.add_separator()
@@ -154,7 +156,9 @@ class Window(tk.Tk):
                 this.initSettings()
                 this.saveSettings()
                 
-    def loadCatalog(this):
+    def loadCatalog(this, path = None):
+        if path:
+            this.settings['catalog'] = path
         try:
             this.catalog = loadCSV(this.settings['catalog'], delimiter=',', quotechar='"')
         except:
