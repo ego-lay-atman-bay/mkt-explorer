@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 import lxml
 from lxml import etree
+from pydub import AudioSegment
 
 def createLogger(type = 'console'):
     format = '%(levelname)s: %(message)s'
@@ -106,9 +107,13 @@ class WWiseAudio():
                 this.wem = None
                 this._wemPath = None
                 this.wav = None
+                this.raw_wav = None
                 this._wavPath = None
                 this.ogg = None
+                this.raw_ogg = None
                 this._oggPath = None
+                
+                this.audio = None
                 
             def read(this, format = 'wem'):
                 """
@@ -145,11 +150,13 @@ class WWiseAudio():
                     if format == 'wav':
                         this._wavPath = os.path.join(outPath, 'File0001.wav')
                         with open(this._wavPath, 'rb') as file:
-                            this.wav = file.read()
+                            this.raw_wav = file.read()
+                        this.audio = AudioSegment.from_file(this._wavPath, format)
                     elif format == 'ogg':
                         this._oggPath = os.path.join(outPath, 'File0001.ogg')
                         with open(this._oggPath, 'rb') as file:
-                            this.ogg = file.read()
+                            this.raw_ogg = file.read()
+                        this.audio = AudioSegment.from_file(this._oggPath, format)
                             
                 # logging.info(
                 #     this.wem,
@@ -159,9 +166,13 @@ class WWiseAudio():
                 
                 formats = {
                     'wem': this.wem,
-                    'wav': this.wav,
-                    'ogg': this.ogg,
+                    'wav': this.raw_wav,
+                    'ogg': this.raw_ogg,
                 }
                 
                 return formats[format]
+            
+class UnityAsset():
+    def __init__(this) -> None:
+        pass
                 
