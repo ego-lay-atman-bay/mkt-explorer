@@ -14,7 +14,7 @@ import tkinter.filedialog as filedialog
 
 import UnityPy
 
-from assetTypes import WWiseAudio
+from AssetTypes import WWiseAudio
 
 UnityPyVersion = '1.9.24'
 
@@ -55,7 +55,7 @@ createLogger()
 class Window(tk.Tk):
     def __init__(this, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        this.title('')
+        this.title('MKT Explorer')
         this.geometry('%dx%d' % (760 , 610) )
         
         # this.style = ttk.Style()
@@ -97,7 +97,7 @@ class Window(tk.Tk):
 
         this.fileMenu = tk.Menu(this.menuBar, tearoff=0)
         this.fileMenu.add_command(label= 'Load Catalog')
-        this.fileMenu.add_command(label= 'Load File')
+        this.fileMenu.add_command(label= 'Load File', command=lambda : this.loadFile(this.chooseFile()))
         this.fileMenu.add_command(label= 'Load Folder')
         this.fileMenu.add_separator()
         this.fileMenu.add_command(label='Extract File')
@@ -132,7 +132,7 @@ class Window(tk.Tk):
         this.pages['assets']['contents']['treeview'].pack(fill='both', expand=True)
         
     def chooseFile(this):
-        file = filedialog.askopenfilename(title='Choose File', defaultextension='*.*', filetypes=('any', '*.*'))
+        file = filedialog.askopenfilename(title='Choose File', defaultextension='*.*', filetypes=((('any', '*.*'), ('WWise audio', '*.pck'), )))
         return file
     
     def chooseFolder(this):
@@ -140,7 +140,32 @@ class Window(tk.Tk):
         return folder
     
     def loadFile(this, path):
-        pass
+        logging.info(path)
+        type = UnityPy.helpers.ImportHelper.check_file_type(path)
+        logging.info(type[0].value)
+        
+        """
+        File types:
+            
+            AssetsFile = 0
+            BundleFile = 1
+            WebFile = 2
+            ResourceFile = 9
+            ZIP = 10
+        """
+        
+        if type[0].value == 9:
+            objects = [WWiseAudio(path)]
+            this.environment = UnityPy.Environment()
+        else:
+            this.environment = UnityPy.load(path)
+            objects = this.environment.objects
+            
+        this.files = [path]
+        this.assets = objects
+        
+        logging.info(this.files)
+        logging.info(this.assets)
         
     # settings
     def loadSettings(this, **kwargs):
