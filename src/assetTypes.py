@@ -9,26 +9,6 @@ import lxml
 from lxml import etree
 from pydub import AudioSegment
 
-def createLogger(type = 'console'):
-    format = '%(levelname)s: %(message)s'
-    datefmt = '%I:%M:%S %p'
-    level = logging.DEBUG
-
-    filename = f'logs/{datetime.now().strftime("%m-%d-%y_%H-%M-%S")}.log'
-
-    if type == 'file':
-        format = '%(asctime)s %(levelname)s: %(message)s'
-        try:
-            os.mkdir('logs')
-        except:
-            pass
-
-        logging.basicConfig(filename=filename, filemode='w', format=format, datefmt=datefmt, level=level)
-    else:
-        logging.basicConfig(format=format, datefmt=datefmt, level=level)
-        
-createLogger()
-
 class WWiseAudio():
         def __init__(this, file, options = None) -> None:
             if options:
@@ -49,7 +29,13 @@ class WWiseAudio():
             os.makedirs('tmp/audio', exist_ok=True)
         
             this._scanName = f'tmp/audio/{os.path.splitext(os.path.basename(this.filename))[0]}.xml'
-            subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RScannerConsole.exe", this.filename, f"/s:{this._scanName}"])
+            logging.info(f'Scanning {this.filename}')
+            logging.info(f'Result {this._scanName}')
+            result = subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RScannerConsole.exe", this.filename, f"/s:{this._scanName}"], capture_output=True, text=True)
+                    
+            logging.info(result.stdout)
+            
+            logging.info(f'Contents: \n{etree.tostring(etree.parse(this._scanName).getroot(), pretty_print=True, encoding="utf-8").decode("utf-8")}\n')
             
             this.files = []
             this.scanResults = {
@@ -74,13 +60,16 @@ class WWiseAudio():
                     for entry in range(len(root[data])):
                         wem = this.WEM(this.filename, root[data][entry].get('Name'), root[data][entry].get('Offset'), root[data][entry].get('Length'), this.FileSize, this.settings, root[data][entry].get('TypeName'), root[data][entry].get('PerceivedType'))
                         this.files.append(wem)
-                        this.scanResults['Entries'].append({
+                        results = {
                             'Name': wem.name,
                             'TypeName': wem.typeName,
                             'PerceivedType': wem.PerceivedType,
                             'Offset': wem.offset,
                             'Length': wem.length,
-                        })
+                        }
+                        this.scanResults['Entries'].append(results)
+                        
+                        logging.info(results)
             
             
         class WEM():
@@ -136,24 +125,35 @@ class WWiseAudio():
                     
                 outPath = f'tmp/audio/{os.path.basename(os.path.splitext(this.filename)[0])}/{os.path.splitext(this.name)[0]}'
                 
-                scannerArgs = [f'/e:{outPath}', f'/r:{this.offset}-{this.length}']
+                scannerArgs = [f'/e:{outPath}', f'/r:{this.offset}-{str((int(this.offset) + int(this.length)) - 1)}', '/l']
+                logging.info(f'{scannerArgs = }')
                 
                 if this._wemPath == None:
-                    this._wemPath = os.path.abspath(os.path.join(outPath, 'File0001.wem'))
-                    subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RScannerConsole.exe", this.filename] + scannerArgs)
+                    shutil.rmtree(outPath, ignore_errors=True)
+                    result = subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RScannerConsole.exe", this.filename] + scannerArgs, capture_output=True, text=True)
+                    logging.info(result.stdout)
+                    
+                    files = [i for i in os.listdir(outPath) if i.endswith('wem')]
+                    
+                    this._wemPath = os.path.abspath(os.path.join(outPath, files[0]))
+                    
                     with open(this._wemPath, 'rb') as file:
                         this.wem = file.read()
                 
                 if format != 'wem':
-                    subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RExtractorConsole.exe", this._wemPath, outPath] + extracterArgs.split(' '))
+                    result = subprocess.run([f"{this.settings['RavioliGameTools']['path']}/RExtractorConsole.exe", this._wemPath, outPath] + extracterArgs.split(' '), capture_output=True, text=True)
+                    
+                    logging.info(result.stdout)
+                    
+                    files = [i for i in os.listdir(outPath) if i.endswith(format)]
                     
                     if format == 'wav':
-                        this._wavPath = os.path.join(outPath, 'File0001.wav')
+                        this._wavPath = os.path.join(outPath, files[0])
                         with open(this._wavPath, 'rb') as file:
                             this.raw_wav = file.read()
                         this.audio = AudioSegment.from_file(this._wavPath, format)
                     elif format == 'ogg':
-                        this._oggPath = os.path.join(outPath, 'File0001.ogg')
+                        this._oggPath = os.path.join(outPath, files[0])
                         with open(this._oggPath, 'rb') as file:
                             this.raw_ogg = file.read()
                         this.audio = AudioSegment.from_file(this._oggPath, format)
@@ -172,7 +172,32 @@ class WWiseAudio():
                 
                 return formats[format]
             
+            def export(this, path, format = 'wav'):
+                format = format.lower()
+                if not format in ['wem', 'wav', 'ogg']:
+                    logging.warning(f'format "{format}" is not supported.\nUsing "wav" format.')
+                    format = 'wav'
+                    
+                formats = {
+                    'wem': this.wem,
+                    'wav': this.raw_wav,
+                    'ogg': this.raw_ogg,
+                }
+                
+                if formats[format] == None:
+                    logging.error(f'Unable to get format "{format}"')
+                    return
+                
+                output = os.path.dirname(path)
+                os.makedirs(output, exist_ok=True)
+                
+                with open(path, 'wb') as file:
+                    file.write(formats[format])
+                
+            
 class UnityAsset():
     def __init__(this) -> None:
         pass
+    
+
                 
