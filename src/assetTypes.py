@@ -22,10 +22,10 @@ class WWiseAudio():
                 }
                 
             this.filename = file
-            this._extractAudio()
+            this._scanFile()
             
             
-        def _extractAudio(this):
+        def _scanFile(this):
             os.makedirs('tmp/audio', exist_ok=True)
         
             this._scanName = f'tmp/audio/{os.path.splitext(os.path.basename(this.filename))[0]}.xml'
@@ -71,6 +71,22 @@ class WWiseAudio():
                         
                         logging.info(results)
             
+        def extractAudio(this, out, format = 'wav', subdir = False):
+            format = format.lower()
+            if not format in ['wem', 'wav', 'ogg']:
+                logging.warning(f'format "{format}" is not supported.\nUsing "wav" format.')
+                format = 'wav'
+                
+            args = [f'/sf:{format}', '/as']
+            if subdir:
+                args.append('/s')
+                
+            cmd = [os.path.join(this.settings['RavioliGameTools']['path'], "RExtractorConsole.exe"), this.filename, out] + args
+            # logging.debug(cmd)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            logging.info(result.stdout)
+            
+            logging.info('Done!')
             
         class WEM():
             def __init__(this, filename, name, _from, to, filesize, options, typeName = 'Wwise Encoded Media', PerceivedType = 'Audio') -> None:
@@ -80,8 +96,8 @@ class WWiseAudio():
                     this.settings = {
                         'catalog': 'catalog.csv',
                         'RavioliGameTools': {
-                        'path': 'tools/RavioliGameTools_v2.10',
-                        'args': '/s /as'
+                            'path': 'tools/RavioliGameTools_v2.10',
+                            'args': '/s /as'
                         },
                     }
                     
