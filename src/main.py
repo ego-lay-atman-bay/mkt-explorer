@@ -94,6 +94,7 @@ class Window(tk.Tk):
         this.assets = []
         this.fileStructure = {}
         this.environment = UnityPy.Environment()
+        this.extracting = False
 
         this.notebook = ttk.Notebook()
         this.notebook.pack(fill='both', expand=True)
@@ -161,7 +162,7 @@ class Window(tk.Tk):
         this.menuBar.add_cascade(label= 'File', menu=this.fileMenu)
         
     def initialize(this):
-        pass
+        this.protocol("WM_DELETE_WINDOW", this.close)
     
     def createAssets(this):
         this.pages['assets']['columns'] = ['name', 'container', 'type', 'pathID', 'size']
@@ -226,11 +227,15 @@ class Window(tk.Tk):
         logger.info(this.assets)
         
     def extractAudio(this):
+        this.extracting = True
         this.progress['primary']['bar']['max'] = len(this.catalog)
         
         this.progress['primary']['progress'].set(0)
         
         for key,state,type,path in this.catalog:
+            if not this.extracting:
+                break
+            
             this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
             nabepath = pathlib.Path(path)
             parts = nabepath.parts[2:]
@@ -264,23 +269,32 @@ class Window(tk.Tk):
             
             try:
                 object = WWiseAudio(nabepath)
-                this.progress['secondary']['bar']['max'] = len(object.files)
+                # this.progress['secondary']['bar']['max'] = len(object.files)
                 this.progress['secondary']['progress'].set(0)
-                for wem in object.files:
-                    logger.info(f'  {os.path.splitext(wem.name)[0] + ".wav"}')
-                    destination = os.path.join(this.output, 'WAV', name)
+                destination = os.path.join(this.output, 'WAV', name)
+                os.makedirs(destination, exist_ok=True)
+                object.extractAudio(destination)
+                
+                # for wem in object.files:
+                #     logger.info(f'  {os.path.splitext(wem.name)[0] + ".wav"}')
+                #     destination = os.path.join(this.output, 'WAV', name)
                     
-                    this.progress['secondary']['progress'].set(this.progress['secondary']['progress'].get() + 1)
-                    this.progress['secondary']['text_var'].set(wem.name)
+                #     this.progress['secondary']['progress'].set(this.progress['secondary']['progress'].get() + 1)
+                #     this.progress['secondary']['text_var'].set(wem.name)
                     
-                    os.makedirs(destination, exist_ok=True)
-                    wem.read('wav')
-                    wem.export(os.path.join(destination, (os.path.splitext(wem.name)[0] + '.wav')))
-                    
+                #     os.makedirs(destination, exist_ok=True)
+                #     wem.read('wav')
+                #     wem.export(os.path.join(destination, (os.path.splitext(wem.name)[0] + '.wav')))
+                 
             except Exception as e:
                 logger.warning(f'unable to load WWise audio {nabepath}')
                 logger.error(str(e))
+                
+            this.progress['secondary']['text_var'].set('Done!')
+            
+        this.progress['primary']['text_var'].set('Done!')
         logger.info('Done!')
+        this.extracting = False
         
     def extractNabeAudio(this):
         this.nabe = filedialog.askdirectory(title='choose nabe')
@@ -288,6 +302,11 @@ class Window(tk.Tk):
         
         thread = threading.Thread(target=this.extractAudio)
         thread.start()
+        
+        
+    def setExtractingState(this, state = False):
+        this.extracting = state
+        return this.extracting
         
     # settings
     def loadSettings(this, **kwargs):
@@ -321,10 +340,13 @@ class Window(tk.Tk):
             },
         }
         
-
     def saveSettings(this):
         file = open(this.settingsFile, 'w+')
         json.dump(this.settings, file, indent=2)
+        
+    def close(this):
+        this.setExtractingState(False)
+        this.destroy()
         
 def main():
     app = Window()
