@@ -10,7 +10,7 @@ from lxml import etree
 from pydub import AudioSegment
 
 class WWiseAudio():
-        def __init__(this, file, options = None) -> None:
+        def __init__(this, file, options = None, container = None) -> None:
             if options:
                 this.settings = options
             else:
@@ -20,8 +20,13 @@ class WWiseAudio():
                         'path': 'tools/RavioliGameTools_v2.10',
                     },
                 }
-                
+            
             this.filename = file
+            if container == None:
+                this.container = os.path.basename(this.filename)
+            else:
+                this.container = container
+                
             this._scanFile()
             
             
