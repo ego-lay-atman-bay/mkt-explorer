@@ -100,17 +100,30 @@ class Window(tk.Tk):
         this.notebook.pack(fill='both', expand=True)
         
         this.pages = {
+            'env': {
+                'frame': ttk.Frame(this.notebook),
+                'contents': {}
+            },
             'assets': {
+                'frame': ttk.Frame(this.notebook),
+                'contents': {}
+            },
+            'structure': {
                 'frame': ttk.Frame(this.notebook),
                 'contents': {}
             }
         }
         
+        this.notebook.add(this.pages['env']['frame'], text='Environment')
         this.notebook.add(this.pages['assets']['frame'], text='Assets')
+        this.notebook.add(this.pages['structure']['frame'], text='Filesystem')
         
-        this.createAssets()
+        this.createAssetsPage()
+        this.createEnvPage()
+        this.createStructurePage()
+        
         this.progress = {
-            'frame': ttk.Frame(this.pages['assets']['frame'], borderwidth=2),
+            'frame': ttk.Frame(this, borderwidth=2),
             'primary': {
                 'bar': None,
                 'label': None,
@@ -154,7 +167,7 @@ class Window(tk.Tk):
         this.fileMenu = tk.Menu(this.menuBar, tearoff=0)
         this.fileMenu.add_command(label= 'Load Catalog', command=this.chooseCatalog)
         this.fileMenu.add_command(label= 'Load File', command=lambda : this.loadFile(this.chooseFile()))
-        this.fileMenu.add_command(label= 'Load Folder')
+        this.fileMenu.add_command(label= 'Load Nabe', command=lambda : this.loadNabe(this.chooseFolder()))
         this.fileMenu.add_separator()
         this.fileMenu.add_command(label='Extract File')
         this.fileMenu.add_command(label='Extract Audio Folder', command=this.extractNabeAudio)
@@ -163,8 +176,16 @@ class Window(tk.Tk):
         
     def initialize(this):
         this.protocol("WM_DELETE_WINDOW", this.close)
+        
+    def createStructurePage(this):
+        this.pages['structure']['contents']['treeview'] = ttk.Treeview(this.pages['structure']['frame'], show='tree')
+        this.pages['structure']['contents']['treeview'].pack(fill='both', expand=True)
+        
+    def createEnvPage(this):
+        this.pages['env']['contents']['treeview'] = ttk.Treeview(this.pages['env']['frame'], show='tree')
+        this.pages['env']['contents']['treeview'].pack(fill='both', expand=True)
     
-    def createAssets(this):
+    def createAssetsPage(this):
         this.pages['assets']['columns'] = ['name', 'container', 'type', 'pathID', 'size']
         this.pages['assets']['contents']['treeview'] = ttk.Treeview(this.pages['assets']['frame'], columns=this.pages['assets']['columns'], show='headings')
         
@@ -187,6 +208,34 @@ class Window(tk.Tk):
         
         this.pages['assets']['contents']['treeview'].pack(fill='both', expand=True)
         
+    def updateEnv(this):
+        this.pages['env']['contents']['treeview'].delete(*this.pages['env']['contents']['treeview'].get_children())
+        for cab in this.environment.cabs:
+            this.pages['env']['contents']['treeview'].insert('', 'end', text=cab)
+        
+    
+    def updateAssets(this):
+        this.pages['assets']['contents']['treeview'].delete(*this.pages['assets']['contents']['treeview'].get_children())
+        for asset in this.assets:
+        # ['name', 'container', 'type', 'pathID', 'size']
+            if isinstance(asset, WWiseAudio):
+                values = [asset.container, asset.container, 'WWise_Audio', 0, asset.fileSize]
+            else:
+                values = [asset.name, asset.container, asset.type.name, asset.path_id, '']
+                
+            this.pages['assets']['contents']['treeview'].insert('', 'end', values=values)
+    
+    def updateStructure(this):
+        this.pages['structure']['contents']['treeview'].delete(*this.pages['structure']['contents']['treeview'].get_children())
+        
+        def addToStructure(data : dict, id = ''):
+            for d in data:
+                newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', d)
+                if isinstance(data[d], dict):
+                    addToStructure(data[d], newID)
+        
+        addToStructure(this.fileStructure)
+        
     def chooseFile(this):
         file = filedialog.askopenfilename(title='Choose File', defaultextension='*.*', filetypes=((('any', '*.*'), ('WWise audio', '*.pck'), )))
         return file
@@ -200,8 +249,82 @@ class Window(tk.Tk):
         folder = filedialog.askdirectory(title='Pick Folder')
         return folder
     
-    def loadFile(this, path):
+    def loadNabe(this, folder):
+        if not folder:
+            return
+        
+        this.nabe = folder
+        
+        this.assets = []
+        this.fileStructure = {}
+        this.environment = UnityPy.Environment()
+        
+        # logger.info(this.catalog)
+        
+        this.progress['primary']['bar']['max'] = len(this.catalog)
+        
+        for key,state,type,path in this.catalog:
+            # if not this.extracting:
+            #     break
+            
+            this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
+            nabepath = pathlib.Path(path)
+            parts = nabepath.parts[2:]
+            nabepath = pathlib.Path(this.nabe, *parts)
+            nabepath = nabepath.as_posix()
+            
+            this.progress['primary']['text_var'].set(os.path.basename(key))
+            this.update()
+            
+            # try:
+            logger.info(nabepath)
+            this.loadFile(nabepath, container=key)
+            # except Exception as e:
+            #     logger.warning(f'unable to load file {nabepath}')
+            #     logger.error(str(e))
+        
+        
+        for asset in  this.assets:
+            if asset.container:
+                this.addToFilesystem(asset.container, asset)
+        
+        this.updateEnv()
+        this.updateAssets()
+        this.updateStructure()
+    
+    def addToFilesystem(this, path, file, **kwargs):
+        if isinstance(path, (list, tuple)):
+            data = kwargs['data']
+            if len(path) <= 1:
+                data[path[0]] = file
+                return data
+            
+            try:
+                data[path[0]]
+                # if not isinstance(data[path[0]], dict):
+                #     logging.error(f'Path {data} taken')
+            except:
+                data[path[0]] = {}
+                
+            if not isinstance(data[path[0]], dict):
+                logging.error(f'Path {data} taken')
+                return data
+            
+            data = data[path[0]]
+            
+            this.addToFilesystem(path[1:], file, data=data)
+        else:
+            parts = pathlib.Path(path).parts
+            if parts[0] == '':
+                parts = parts[1:]
+            
+            this.addToFilesystem(parts, file, data=this.fileStructure)
+            
+    
+    def loadFile(this, path, container = None):
         logger.info(path)
+        if not os.path.isfile(path):
+            return
         type = UnityPy.helpers.ImportHelper.check_file_type(path)
         logger.info(type[0].value)
         
@@ -214,17 +337,18 @@ class Window(tk.Tk):
         #     ZIP = 10
         
         if type[0].value == 9:
-            objects = [WWiseAudio(path)]
-            this.environment = UnityPy.Environment()
+            this.assets.append(WWiseAudio(path, container=container))
         else:
-            this.environment = UnityPy.load(path)
-            objects = this.environment.objects
+            this.environment.load_file(path)
+            env = UnityPy.load(path)
+            this.assets = this.assets + env.objects
             
-        this.files = [path]
-        this.assets = objects
+        this.files.append(path)
+            
+        # this.assets = objects
         
-        logger.info(this.files)
-        logger.info(this.assets)
+        # logger.info(this.files)
+        # logger.info(this.assets)
         
     def extractAudio(this):
         this.extracting = True
@@ -298,7 +422,11 @@ class Window(tk.Tk):
         
     def extractNabeAudio(this):
         this.nabe = filedialog.askdirectory(title='choose nabe')
+        if not this.nabe:
+            return
         this.output = filedialog.askdirectory(title='choose output folder')
+        if not this.output:
+            return
         
         thread = threading.Thread(target=this.extractAudio)
         thread.start()
