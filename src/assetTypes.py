@@ -26,6 +26,8 @@ class WWiseAudio():
                 this.container = os.path.basename(this.filename)
             else:
                 this.container = container
+            this.FileSize = 0
+            this.LastPosition = 0
                 
             this._scanFile()
             
