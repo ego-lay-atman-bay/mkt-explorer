@@ -167,7 +167,7 @@ class Window(tk.Tk):
         this.fileMenu = tk.Menu(this.menuBar, tearoff=0)
         this.fileMenu.add_command(label= 'Load Catalog', command=this.chooseCatalog)
         this.fileMenu.add_command(label= 'Load File', command=lambda : this.loadFile(this.chooseFile()))
-        this.fileMenu.add_command(label= 'Load Nabe', command=lambda : this.loadNabe(this.chooseFolder()))
+        this.fileMenu.add_command(label= 'Load Nabe', command=this.loadFolder)
         this.fileMenu.add_separator()
         this.fileMenu.add_command(label='Extract File')
         this.fileMenu.add_command(label='Extract Audio Folder', command=this.extractNabeAudio)
@@ -181,13 +181,27 @@ class Window(tk.Tk):
         this.pages['structure']['contents']['treeview'] = ttk.Treeview(this.pages['structure']['frame'], show='tree')
         this.pages['structure']['contents']['treeview'].pack(fill='both', expand=True)
         
+        this.pages['structure']['contents']['scrollbar'] = ttk.Scrollbar(this.pages['structure']['contents']['treeview'], orient='vertical', command=this.pages['structure']['contents']['treeview'].yview)
+        
+        this.pages['structure']['contents']['treeview'].config(yscrollcommand=this.pages['structure']['contents']['scrollbar'].set)
+        this.pages['structure']['contents']['scrollbar'].pack(fill='y', side='right')
+        
     def createEnvPage(this):
         this.pages['env']['contents']['treeview'] = ttk.Treeview(this.pages['env']['frame'], show='tree')
         this.pages['env']['contents']['treeview'].pack(fill='both', expand=True)
+        
+        this.pages['env']['contents']['scrollbar'] = ttk.Scrollbar(this.pages['env']['contents']['treeview'], orient='vertical', command=this.pages['env']['contents']['treeview'].yview)
+        
+        this.pages['env']['contents']['treeview'].config(yscrollcommand=this.pages['env']['contents']['scrollbar'].set)
+        this.pages['env']['contents']['scrollbar'].pack(fill='y', side='right')
     
     def createAssetsPage(this):
         this.pages['assets']['columns'] = ['name', 'container', 'type', 'pathID', 'size']
         this.pages['assets']['contents']['treeview'] = ttk.Treeview(this.pages['assets']['frame'], columns=this.pages['assets']['columns'], show='headings')
+        this.pages['assets']['contents']['scrollbar'] = ttk.Scrollbar(this.pages['assets']['contents']['treeview'], orient='vertical', command=this.pages['assets']['contents']['treeview'].yview)
+        
+        this.pages['assets']['contents']['treeview'].config(yscrollcommand=this.pages['assets']['contents']['scrollbar'].set)
+        this.pages['assets']['contents']['scrollbar'].pack(fill='y', side='right')
         
         columnWidth = 1
         
@@ -219,7 +233,7 @@ class Window(tk.Tk):
         for asset in this.assets:
         # ['name', 'container', 'type', 'pathID', 'size']
             if isinstance(asset, WWiseAudio):
-                values = [asset.container, asset.container, 'WWise_Audio', 0, asset.fileSize]
+                values = [asset.container, asset.container, 'WWise_Audio', 0, asset.FileSize]
             else:
                 values = [asset.name, asset.container, asset.type.name, asset.path_id, '']
                 
@@ -230,10 +244,12 @@ class Window(tk.Tk):
         
         def addToStructure(data : dict, id = ''):
             for d in data:
-                newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', d)
+                newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', text=d)
                 if isinstance(data[d], dict):
                     addToStructure(data[d], newID)
+                logger.debug(f'{data[d] = }\n{newID = }')
         
+        logger.debug(this.fileStructure)
         addToStructure(this.fileStructure)
         
     def chooseFile(this):
@@ -248,6 +264,11 @@ class Window(tk.Tk):
     def chooseFolder(this):
         folder = filedialog.askdirectory(title='Pick Folder')
         return folder
+    
+    def loadFolder(this):
+        folder = this.chooseFolder()
+        thread = threading.Thread(target=lambda : this.loadNabe(folder))
+        thread.start()
     
     def loadNabe(this, folder):
         if not folder:
@@ -273,16 +294,17 @@ class Window(tk.Tk):
             nabepath = pathlib.Path(this.nabe, *parts)
             nabepath = nabepath.as_posix()
             
-            this.progress['primary']['text_var'].set(os.path.basename(key))
-            this.update()
+            this.progress['primary']['text_var'].set(f"({this.progress['primary']['progress'].get()}/{this.progress['primary']['bar']['max']}) {os.path.basename(key)}")
+            # this.update()
             
             # try:
-            logger.info(nabepath)
+            # logger.info(nabepath)
             this.loadFile(nabepath, container=key)
             # except Exception as e:
             #     logger.warning(f'unable to load file {nabepath}')
             #     logger.error(str(e))
         
+        this.assets = this.assets + this.environment.objects
         
         for asset in  this.assets:
             if asset.container:
@@ -340,8 +362,8 @@ class Window(tk.Tk):
             this.assets.append(WWiseAudio(path, container=container))
         else:
             this.environment.load_file(path)
-            env = UnityPy.load(path)
-            this.assets = this.assets + env.objects
+            # env = UnityPy.load(path)
+            # this.assets = this.assets + env.objects
             
         this.files.append(path)
             
