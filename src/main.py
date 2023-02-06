@@ -8,12 +8,14 @@ import logging
 from datetime import datetime
 import lxml
 from lxml import etree
+import time
 
 import threading
 
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as filedialog
+from tkinter import messagebox
 
 import UnityPy
 
@@ -39,12 +41,13 @@ def createLogger(type = 'console'):
     handlers = []
 
     if type == 'file':
-        handlers.append(logging.FileHandler(filename))
-        format = '%(asctime)s %(levelname)s: %(message)s'
         try:
             os.mkdir('logs')
         except:
             pass
+        
+        handlers.append(logging.FileHandler(filename))
+        format = '%(asctime)s %(levelname)s: %(message)s'
 
         # logging.basicConfig(filename=filename, filemode='w', format=format, datefmt=datefmt, level=level)
         # logger.info('logging file')
@@ -77,6 +80,8 @@ class Window(tk.Tk):
         this.title('MKT Explorer')
         this.geometry('%dx%d' % (760 , 610) )
         
+        this.threads = set()
+        
         # this.style = ttk.Style()
         # print(this.style.theme_names())
         # this.style.theme_use('winnative')
@@ -94,7 +99,7 @@ class Window(tk.Tk):
         this.assets = []
         this.fileStructure = {}
         this.environment = UnityPy.Environment()
-        this.extracting = False
+        this.stop = threading.Event()
 
         this.notebook = ttk.Notebook()
         this.notebook.pack(fill='both', expand=True)
@@ -121,20 +126,30 @@ class Window(tk.Tk):
         this.createAssetsPage()
         this.createEnvPage()
         this.createStructurePage()
+        this.createProgress()
+        
+        this.initialize()
+        
+    def createProgress(this):
+        
         
         this.progress = {
-            'frame': ttk.Frame(this, borderwidth=2),
+            'frame': ttk.Frame(this),
             'primary': {
                 'bar': None,
                 'label': None,
-                'text_var': tk.StringVar(),
-                'progress': tk.IntVar(value=0),
+                'text_var': tk.StringVar(this),
+                'text': '',
+                'event': '',
+                'progress': tk.IntVar(this, value=0),
             },
             'secondary': {
                 'bar': None,
                 'label': None,
-                'text_var': tk.StringVar(),
-                'progress': tk.IntVar(value=0),
+                'text_var': tk.StringVar(this, ),
+                'text': '',
+                'event': '',
+                'progress': tk.IntVar(this, value=0),
             },
         }
         
@@ -142,23 +157,58 @@ class Window(tk.Tk):
         this.progress['primary']['label'] = ttk.Label(this.progress['frame'], textvariable=this.progress['primary']['text_var'])
         
         this.progress['primary']['bar'].grid(column=0, row=0, sticky='ew', pady=2, padx=2)
-        this.progress['primary']['label'].grid(column=1, row=0, sticky='ew', pady=2, padx=2)
+        this.progress['primary']['label'].grid(column=1, row=0, sticky='w', pady=2, padx=2)
         
-        this.progress['frame'].columnconfigure(0, weight=1)
-        this.progress['frame'].columnconfigure(1, weight=1)
+        # this.progress['frame'].columnconfigure(0, weight=1)
+        # this.progress['frame'].columnconfigure(1, weight=1)
         
         this.progress['secondary']['bar'] = ttk.Progressbar(this.progress['frame'], variable=this.progress['secondary']['progress'])
         this.progress['secondary']['label'] = ttk.Label(this.progress['frame'], textvariable=this.progress['secondary']['text_var'])
         
         this.progress['secondary']['bar'].grid(column=0, row=1, sticky='ew', pady=2, padx=2)
-        this.progress['secondary']['label'].grid(column=1, row=1, sticky='ew', pady=2, padx=2)
+        this.progress['secondary']['label'].grid(column=1, row=1, sticky='w', pady=2, padx=2)
         
-        # this.progress['frame'].columnconfigure(0, weight=1)
-        # this.progress['frame'].columnconfigure(1, weight=1)
+        this.progress['frame'].columnconfigure(0, weight=1, uniform='column')
+        this.progress['frame'].columnconfigure(1, weight=1, uniform='column')
         
-        this.progress['frame'].pack(fill='x')
+        this.progress['frame'].pack(fill='x', side='bottom')
         
-        this.initialize()
+        # events
+        
+        this.event_generate('<<UpdatePrimaryProgress>>')
+        this.bind('<<UpdatePrimaryProgress>>', this.addProgress)
+        
+        this.event_generate('<<UpdateSecondaryProgres>>')
+        this.bind('<<UpdateSecondaryProgress>>', lambda e : this.addProgress(e, 'secondary'))
+        
+        this.event_generate('<<ResetPrimaryProgress>>')
+        this.bind('<<ResetPrimaryProgress>>', this.resetProgress)
+        
+        this.event_generate('<<ResetSecondaryProgress>>')
+        this.bind('<<ResetSecondaryProgress>>', lambda e : this.resetProgress(e, 'secondary'))
+        
+        this.event_generate('<<UpdatePrimaryProgressText>>')
+        this.bind('<<UpdatePrimaryProgressText>>', this.setProgressText)
+        
+        this.event_generate('<<UpdateSecondaryProgressText>>')
+        this.bind('<<UpdateSecondaryProgressText>>', lambda e : this.setProgressText(e, 'secondary'))
+        
+    def removeProgressEvents(this):
+        this.event_delete('<<UpdatePrimaryProgress>>')
+        this.event_delete('<<UpdateSecondaryProgres>>')
+        this.event_delete('<<ResetPrimaryProgress>>')
+        this.event_delete('<<ResetSecondaryProgress>>')
+        this.event_delete('<<UpdatePrimaryProgressText>>')
+        this.event_delete('<<UpdateSecondaryProgressText>>')
+        
+    def addProgress(this, event, bar = 'primary'):
+        this.progress[bar]['progress'].set(this.progress[bar]['progress'].get() + 1)
+        
+    def resetProgress(this, event, bar = 'primary'):
+        this.progress[bar]['progress'].set(0)
+    
+    def setProgressText(this, event, bar = 'primary'):
+        this.progress[bar]['text_var'].set(f"{this.progress[bar]['event']} ({this.progress[bar]['progress'].get()}/{this.progress[bar]['bar']['max']}) {this.progress[bar]['text']}")
         
     def createMenuBar(this):
         this.menuBar = tk.Menu(this, name='system')
@@ -223,15 +273,38 @@ class Window(tk.Tk):
         this.pages['assets']['contents']['treeview'].pack(fill='both', expand=True)
         
     def updateEnv(this):
+        logger.info('updating environment')
         this.pages['env']['contents']['treeview'].delete(*this.pages['env']['contents']['treeview'].get_children())
+        this.progress['primary']['bar']['max'] = len(this.environment.cabs)
+        this.progress['primary']['event'] = "Updating environment"
+        this.event_generate('<<ResetPrimaryProgress>>')
+        
         for cab in this.environment.cabs:
+            if this.stop:
+                break
+            
+            this.progress['primary']['text'] = "{cab}"
+            this.event_generate('<<UpdatePrimaryProgress>>')
+            this.event_generate('<<UpdatePrimaryProgressText>>')
+            
             this.pages['env']['contents']['treeview'].insert('', 'end', text=cab)
         
     
     def updateAssets(this):
+        logger.info('Updating assets')
         this.pages['assets']['contents']['treeview'].delete(*this.pages['assets']['contents']['treeview'].get_children())
+        this.progress['primary']['bar']['max'] = len(this.assets)
+        this.progress['primary']['event'] = "Updating assets"
+        this.event_generate('<<ResetPrimaryProgress>>')
+        
         for asset in this.assets:
-        # ['name', 'container', 'type', 'pathID', 'size']
+            if this.stop.is_set():
+                break
+            this.progress['primary']['text'] = ""
+            this.event_generate('<<UpdatePrimaryProgress>>')
+            this.event_generate('<<UpdatePrimaryProgressText>>')
+            
+        #   ['name', 'container', 'type', 'pathID', 'size']
             if isinstance(asset, WWiseAudio):
                 values = [asset.container, asset.container, 'WWise_Audio', 0, asset.FileSize]
             else:
@@ -240,10 +313,22 @@ class Window(tk.Tk):
             this.pages['assets']['contents']['treeview'].insert('', 'end', values=values)
     
     def updateStructure(this):
+        logger.info('Updating file stucture')
         this.pages['structure']['contents']['treeview'].delete(*this.pages['structure']['contents']['treeview'].get_children())
+        this.progress['primary']['bar']['max'] = this.fileStructureLength
+        this.progress['primary']['event'] = "Updating filesystem"
+        this.event_generate('<<ResetPrimaryProgress>>')
+
         
         def addToStructure(data : dict, id = ''):
             for d in data:
+                if this.stop.is_set():
+                    break
+                this.progress['primary']['text'] = f"{d}"
+                
+                this.event_generate('<<UpdatePrimaryProgress>>')
+                this.event_generate('<<UpdatePrimaryProgressText>>')
+                
                 newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', text=d)
                 if isinstance(data[d], dict):
                     addToStructure(data[d], newID)
@@ -267,14 +352,15 @@ class Window(tk.Tk):
     
     def loadFolder(this):
         folder = this.chooseFolder()
-        thread = threading.Thread(target=lambda : this.loadNabe(folder))
-        thread.start()
+        if folder:
+            this.nabe = folder
+            thread = threading.Thread(target=this.loadNabe)
+            this.threads.add(thread)
+            thread.start()
     
-    def loadNabe(this, folder):
-        if not folder:
-            return
-        
-        this.nabe = folder
+    def loadNabe(this):
+        thread = threading.current_thread()
+        # messagebox.showinfo('Start loading', 'Start loading nabe')
         
         this.assets = []
         this.fileStructure = {}
@@ -283,36 +369,88 @@ class Window(tk.Tk):
         # logger.info(this.catalog)
         
         this.progress['primary']['bar']['max'] = len(this.catalog)
+        this.progress['primary']['event'] = "Loading nabe"
+        this.event_generate('<<ResetPrimaryProgress>>')
         
         for key,state,type,path in this.catalog:
-            # if not this.extracting:
-            #     break
+            logger.debug(f'{this.stop = }')
+            if this.stop.is_set():
+                logger.debug(f'{this.stop = }')
+                break
             
-            this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
-            nabepath = pathlib.Path(path)
-            parts = nabepath.parts[2:]
-            nabepath = pathlib.Path(this.nabe, *parts)
-            nabepath = nabepath.as_posix()
-            
-            this.progress['primary']['text_var'].set(f"({this.progress['primary']['progress'].get()}/{this.progress['primary']['bar']['max']}) {os.path.basename(key)}")
-            # this.update()
-            
-            # try:
-            # logger.info(nabepath)
-            this.loadFile(nabepath, container=key)
-            # except Exception as e:
-            #     logger.warning(f'unable to load file {nabepath}')
-            #     logger.error(str(e))
+            if not this.stop.is_set():
+                # logger.debug(this.progress['primary']['progress'])
+                # logger.debug(this.progress['primary']['progress'].get())
+                if this.stop.is_set():
+                    logger.debug(f'{this.stop = }')
+                    break
+                
+                nabepath = pathlib.Path(path)
+                parts = nabepath.parts[2:]
+                nabepath = pathlib.Path(this.nabe, *parts)
+                nabepath = nabepath.as_posix()
+
+                logger.debug(f'after nabepath {this.stop = }')
+
+                if this.stop.is_set():
+                    logger.debug(f'{this.stop = }')
+                    break
+                else:
+                    this.progress['primary']['text'] = f"{os.path.basename(key)}"
+                    this.event_generate('<<UpdatePrimaryProgress>>')
+                    this.event_generate('<<UpdatePrimaryProgressText>>')
+                
+                # this.update()
+
+                # try:
+                # logger.info(nabepath)
+                this.loadFile(nabepath, container=key)
+                logger.info('loaded file')
+                logger.debug(f'{this.stop = }')
+                print(f'{this.stop = }')
+                # except Exception as e:
+                #     logger.warning(f'unable to load file {nabepath}')
+                #     logger.error(str(e))
         
-        this.assets = this.assets + this.environment.objects
+        logger.debug(f'after loop {this.stop = }')
         
-        for asset in  this.assets:
-            if asset.container:
-                this.addToFilesystem(asset.container, asset)
+        if not this.stop.is_set():
         
-        this.updateEnv()
-        this.updateAssets()
-        this.updateStructure()
+            this.assets = this.assets + this.environment.objects
+            this.fileStructureLength = 0
+
+            # messagebox.showinfo('Loading complete', 'Loading complete. Now starting updating gui.')
+
+            this.progress['primary']['bar']['max'] = len(this.assets)
+            this.progress['primary']['event'] = "creating filesystem"
+            this.event_generate('<<ResetPrimaryProgress>>')
+
+            logger.info('Creating filesystem')
+            for asset in this.assets:
+                if this.stop.is_set():
+                    logger.debug(f'{this.stop = }')
+                    break
+                
+                this.event_generate('<<UpdatePrimaryProgress>>')
+                this.progress['primary']['text'] = f""
+                this.event_generate('<<UpdatePrimaryProgressText>>')
+                
+                if asset.container:
+                    this.fileStructureLength += 1
+                    this.addToFilesystem(asset.container, asset)
+
+            if not this.stop.is_set():
+                this.progress['primary']['text'].set("Done!")
+                this.event_generate('<<UpdatePrimaryProgressText>>')
+                
+                logger.debug(f'{this.stop = }')
+                this.updateEnv()
+                this.updateAssets()
+                this.updateStructure()
+        
+        this.threads.discard(thread)
+        
+        # return True
     
     def addToFilesystem(this, path, file, **kwargs):
         if isinstance(path, (list, tuple)):
@@ -359,9 +497,12 @@ class Window(tk.Tk):
         #     ZIP = 10
         
         if type[0].value == 9:
+            logger.info('loading WWise audio')
             this.assets.append(WWiseAudio(path, container=container))
         else:
+            logger.info('loading Unity asset')
             this.environment.load_file(path)
+            logger.info('loaded Unity asset')
             # env = UnityPy.load(path)
             # this.assets = this.assets + env.objects
             
@@ -373,13 +514,12 @@ class Window(tk.Tk):
         # logger.info(this.assets)
         
     def extractAudio(this):
-        this.extracting = True
         this.progress['primary']['bar']['max'] = len(this.catalog)
         
         this.progress['primary']['progress'].set(0)
         
         for key,state,type,path in this.catalog:
-            if not this.extracting:
+            if this.stop.is_set():
                 break
             
             this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
@@ -437,11 +577,10 @@ class Window(tk.Tk):
                 logger.error(str(e))
                 
             this.progress['secondary']['text_var'].set('Done!')
-            
+        
         this.progress['primary']['text_var'].set('Done!')
         logger.info('Done!')
-        this.extracting = False
-        
+    
     def extractNabeAudio(this):
         this.nabe = filedialog.askdirectory(title='choose nabe')
         if not this.nabe:
@@ -451,12 +590,13 @@ class Window(tk.Tk):
             return
         
         thread = threading.Thread(target=this.extractAudio)
+        this.threads.append(thread)
         thread.start()
         
         
-    def setExtractingState(this, state = False):
-        this.extracting = state
-        return this.extracting
+    def setStopState(this, state = False):
+        this.stop = state
+        return this.stop
         
     # settings
     def loadSettings(this, **kwargs):
@@ -495,12 +635,74 @@ class Window(tk.Tk):
         json.dump(this.settings, file, indent=2)
         
     def close(this):
-        this.setExtractingState(False)
+        logger.info('Safely stopping threads')
+        # this.setStopState(True)
+        # this.stop = True
+        this.stop.set()
+        this.removeProgressEvents()
+        
+        # this.waitThreads()
+        # time.sleep(1)
+        
+        logger.info('Safely stopped')
+        
         this.destroy()
         
+    def waitThreads(this):
+        
+        for thread in this.threads:
+            if thread.is_alive():
+                thread.join()
+        
+        # over_threads = iter(threading.enumerate())
+        # curr_th = next(over_threads)
+        # while True:
+        #     if curr_th.daemon:
+        #         continue
+        #     try:
+        #         curr_th.join()
+        #     except RuntimeError as err:
+        #         if 'cannot join current thread' in err.args[0]:
+        #             # catchs main thread
+        #             try:
+        #                 curr_th = next(over_threads)
+        #             except StopIteration:
+        #                 break
+        #         else:
+        #             raise
+            
+        #     if curr_th.is_alive():
+        #         continue
+        #     try:
+        #         curr_th = next(over_threads)
+        #     except StopIteration:
+        #         break
+            
+        # for thread in threading.enumerate():
+        #     if thread.daemon:
+        #         continue
+        #     try:
+        #         thread.join()
+        #     except RuntimeError as err:
+        #         if 'cannot join current thread' in err.args[0]:
+        #             # catchs main thread
+        #             continue
+        #         else:
+        #             raise
+        
+        return True
+        
+        
 def main():
+    COUNT = threading.active_count()
+    THREAD_LIMIT = COUNT + 7
     app = Window()
     app.mainloop()
+    print('mainloop ended')
+    while threading.active_count() > COUNT: #simulate join
+        time.sleep(0.1)
+        print(threading.active_count())
+    print('all threads ended, mainthread ends now')
 
 if __name__ == '__main__':
     createLogger('file')
