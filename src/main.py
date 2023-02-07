@@ -433,7 +433,7 @@ class Window(tk.Tk):
                     this.addToFilesystem(asset.container, asset)
 
             if not this.stop.is_set():
-                this.progress['primary']['text'].set("Done!")
+                this.progress['primary']['text'] = "Done!"
                 this.event_generate('<<UpdatePrimaryProgressText>>')
                 
                 logger.debug(f'{this.stop = }')
