@@ -283,12 +283,12 @@ class Window(tk.Tk):
         this.event_generate('<<ResetPrimaryProgress>>')
         
         for cab in this.environment.cabs:
-            if this.stop:
-                break
+            if this.stop.is_set():
+                return
             
             this.progress['primary']['text'] = "{cab}"
             this.event_generate('<<UpdatePrimaryProgress>>')
-            this.event_generate('<<UpdatePrimaryProgressText>>')
+            # this.event_generate('<<UpdatePrimaryProgressText>>')
             
             this.pages['env']['contents']['treeview'].insert('', 'end', text=cab)
         
@@ -302,10 +302,10 @@ class Window(tk.Tk):
         
         for asset in this.assets:
             if this.stop.is_set():
-                break
+                return
             this.progress['primary']['text'] = ""
             this.event_generate('<<UpdatePrimaryProgress>>')
-            this.event_generate('<<UpdatePrimaryProgressText>>')
+            # this.event_generate('<<UpdatePrimaryProgressText>>')
             
         #   ['name', 'container', 'type', 'pathID', 'size']
             if isinstance(asset, WWiseAudio):
@@ -326,11 +326,11 @@ class Window(tk.Tk):
         def addToStructure(data : dict, id = ''):
             for d in data:
                 if this.stop.is_set():
-                    break
+                    return
                 this.progress['primary']['text'] = f"{d}"
                 
                 this.event_generate('<<UpdatePrimaryProgress>>')
-                this.event_generate('<<UpdatePrimaryProgressText>>')
+                # this.event_generate('<<UpdatePrimaryProgressText>>')
                 
                 newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', text=d)
                 if isinstance(data[d], dict):
@@ -381,8 +381,7 @@ class Window(tk.Tk):
             nabepath = pathlib.Path(this.nabe, *parts)
             nabepath = nabepath.as_posix()
 
-            logger.debug(f'after nabepath {this.stop = }')
-            # time.sleep(0.0000001)
+            # logger.debug(f'after nabepath {this.stop = }')
             if not this.stop.is_set():
                 this.progress['primary']['text'] = f"{os.path.basename(key)}"
                 this.event_generate('<<UpdatePrimaryProgress>>')
@@ -418,13 +417,16 @@ class Window(tk.Tk):
 
             logger.info('Creating filesystem')
             for asset in this.assets:
-                if this.stop.is_set():
+                
+                
+                if not this.stop.is_set():
+                    this.progress['primary']['text'] = f""
+                    this.event_generate('<<UpdatePrimaryProgress>>')
+                    # this.event_generate('<<UpdatePrimaryProgressText>>')
+                else:
                     logger.debug(f'{this.stop = }')
                     break
                 
-                this.event_generate('<<UpdatePrimaryProgress>>')
-                this.progress['primary']['text'] = f""
-                this.event_generate('<<UpdatePrimaryProgressText>>')
                 
                 if asset.container:
                     this.fileStructureLength += 1
@@ -437,8 +439,8 @@ class Window(tk.Tk):
                 logger.debug(f'{this.stop = }')
                 this.updateEnv()
                 this.updateAssets()
-                this.updateStructure()
         
+                this.updateStructure()
         this.threads.discard(thread)
         
         # return True
@@ -489,7 +491,8 @@ class Window(tk.Tk):
         
         if type[0].value == 9:
             logger.info('loading WWise audio')
-            this.assets.append(WWiseAudio(path, container=container))
+            asset = WWiseAudio(path, container=container)
+            this.assets.append(asset)
         else:
             logger.info('loading Unity asset')
             this.environment.load_file(path)
@@ -515,16 +518,11 @@ class Window(tk.Tk):
         
         
         for key,state,type,path in this.catalog:
-            if this.stop.is_set():
-                break
-            
-            this.event_generate('<<UpdatePrimaryProgress>>')
             nabepath = pathlib.Path(path)
             parts = nabepath.parts[2:]
             nabepath = pathlib.Path(this.nabe, *parts)
             nabepath = nabepath.as_posix()
             
-            this.progress['primary']['text'] = os.path.basename(key)
             # this.event_generate('<<UpdatePrimaryProgressText>>')
             # this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
             
@@ -574,12 +572,19 @@ class Window(tk.Tk):
                 logger.error(str(e))
                 
             # this.progress['secondary']['text_var'].set('Done!')
+            
+            if not this.stop.is_set():
+                this.progress['primary']['text'] = os.path.basename(key)
+                this.event_generate('<<UpdatePrimaryProgress>>')
+            else:
+                logger.debug(f'{this.stop = }')
+                break
         
-        if this.stop.is_set():
+        if not this.stop.is_set():
             this.progress['primary']['text_var'].set('Done!')
 
-        this.threads.discard(thread)
         logger.info('Done!')
+        this.threads.discard(thread)
     
     def extractNabeAudio(this):
         this.nabe = filedialog.askdirectory(title='choose nabe')

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<ScannerConfig xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Directories>
+    <LastScanSourceDir>C:\Users\christineka\Documents\GitHub\mkt-explorer\src\tmp\audio\b197c6466_6985bfe7\File0002-broken</LastScanSourceDir>
+    <LastLoadSaveDir />
+    <LastExtractDir />
+  </Directories>
+  <MainWindowSettings>
+    <Left>26</Left>
+    <Top>26</Top>
+    <Width>615</Width>
+    <Height>414</Height>
+    <State>Normal</State>
+  </MainWindowSettings>
+  <ViewerWindowSettings>
+    <Left>3</Left>
+    <Top>0</Top>
+    <Width>660</Width>
+    <Height>485</Height>
+    <State>Normal</State>
+  </ViewerWindowSettings>
+  <Options>
+    <Unknowns>true</Unknowns>
+    <Hex>false</Hex>
+    <Log>false</Log>
+    <Range>false</Range>
+  </Options>
+</ScannerConfig>
