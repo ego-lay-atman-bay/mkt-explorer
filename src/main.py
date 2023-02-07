@@ -202,13 +202,16 @@ class Window(tk.Tk):
         this.event_delete('<<UpdateSecondaryProgressText>>')
         
     def addProgress(this, event, bar = 'primary'):
-        this.progress[bar]['progress'].set(this.progress[bar]['progress'].get() + 1)
+        if not this.stop.is_set():
+            this.progress[bar]['progress'].set(this.progress[bar]['progress'].get() + 1)
         
     def resetProgress(this, event, bar = 'primary'):
-        this.progress[bar]['progress'].set(0)
+        if not this.stop.is_set():
+            this.progress[bar]['progress'].set(0)
     
     def setProgressText(this, event, bar = 'primary'):
-        this.progress[bar]['text_var'].set(f"{this.progress[bar]['event']} ({this.progress[bar]['progress'].get()}/{this.progress[bar]['bar']['max']}) {this.progress[bar]['text']}")
+        if not this.stop.is_set():
+            this.progress[bar]['text_var'].set(f"{this.progress[bar]['event']} ({this.progress[bar]['progress'].get()}/{this.progress[bar]['bar']['max']}) {this.progress[bar]['text']}")
         
     def createMenuBar(this):
         this.menuBar = tk.Menu(this, name='system')
@@ -373,44 +376,32 @@ class Window(tk.Tk):
         this.event_generate('<<ResetPrimaryProgress>>')
         
         for key,state,type,path in this.catalog:
-            logger.debug(f'{this.stop = }')
-            if this.stop.is_set():
+            nabepath = pathlib.Path(path)
+            parts = nabepath.parts[2:]
+            nabepath = pathlib.Path(this.nabe, *parts)
+            nabepath = nabepath.as_posix()
+
+            logger.debug(f'after nabepath {this.stop = }')
+            # time.sleep(0.0000001)
+            if not this.stop.is_set():
+                this.progress['primary']['text'] = f"{os.path.basename(key)}"
+                this.event_generate('<<UpdatePrimaryProgress>>')
+                # this.event_generate('<<UpdatePrimaryProgressText>>')
+            else:
                 logger.debug(f'{this.stop = }')
                 break
             
-            if not this.stop.is_set():
-                # logger.debug(this.progress['primary']['progress'])
-                # logger.debug(this.progress['primary']['progress'].get())
-                if this.stop.is_set():
-                    logger.debug(f'{this.stop = }')
-                    break
-                
-                nabepath = pathlib.Path(path)
-                parts = nabepath.parts[2:]
-                nabepath = pathlib.Path(this.nabe, *parts)
-                nabepath = nabepath.as_posix()
+            # this.update()
 
-                logger.debug(f'after nabepath {this.stop = }')
-
-                if this.stop.is_set():
-                    logger.debug(f'{this.stop = }')
-                    break
-                else:
-                    this.progress['primary']['text'] = f"{os.path.basename(key)}"
-                    this.event_generate('<<UpdatePrimaryProgress>>')
-                    this.event_generate('<<UpdatePrimaryProgressText>>')
-                
-                # this.update()
-
-                # try:
-                # logger.info(nabepath)
-                this.loadFile(nabepath, container=key)
-                logger.info('loaded file')
-                logger.debug(f'{this.stop = }')
-                print(f'{this.stop = }')
-                # except Exception as e:
-                #     logger.warning(f'unable to load file {nabepath}')
-                #     logger.error(str(e))
+            # try:
+            # logger.info(nabepath)
+            this.loadFile(nabepath, container=key)
+            logger.info('loaded file')
+            logger.debug(f'{this.stop = }')
+            print(f'{this.stop = }')
+            # except Exception as e:
+            #     logger.warning(f'unable to load file {nabepath}')
+            #     logger.error(str(e))
         
         logger.debug(f'after loop {this.stop = }')
         
@@ -514,21 +505,27 @@ class Window(tk.Tk):
         # logger.info(this.assets)
         
     def extractAudio(this):
+        thread = threading.current_thread()
+
         this.progress['primary']['bar']['max'] = len(this.catalog)
         
-        this.progress['primary']['progress'].set(0)
+        this.event_generate('<<ResetPrimaryProgress>>')
+        this.progress['primary']['event'] = 'Extracting audio'
+        # this.event_generate('<<UpdatePrimaryProgressText>>')
+        
         
         for key,state,type,path in this.catalog:
             if this.stop.is_set():
                 break
             
-            this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
+            this.event_generate('<<UpdatePrimaryProgress>>')
             nabepath = pathlib.Path(path)
             parts = nabepath.parts[2:]
             nabepath = pathlib.Path(this.nabe, *parts)
             nabepath = nabepath.as_posix()
             
-            this.progress['primary']['text_var'].set(os.path.basename(key))
+            this.progress['primary']['text'] = os.path.basename(key)
+            # this.event_generate('<<UpdatePrimaryProgressText>>')
             # this.progress['primary']['progress'].set(this.progress['primary']['progress'].get() + 1)
             
             # this.update()
@@ -576,9 +573,12 @@ class Window(tk.Tk):
                 logger.warning(f'unable to load WWise audio {nabepath}')
                 logger.error(str(e))
                 
-            this.progress['secondary']['text_var'].set('Done!')
+            # this.progress['secondary']['text_var'].set('Done!')
         
-        this.progress['primary']['text_var'].set('Done!')
+        if this.stop.is_set():
+            this.progress['primary']['text_var'].set('Done!')
+
+        this.threads.discard(thread)
         logger.info('Done!')
     
     def extractNabeAudio(this):
@@ -590,7 +590,7 @@ class Window(tk.Tk):
             return
         
         thread = threading.Thread(target=this.extractAudio)
-        this.threads.append(thread)
+        this.threads.add(thread)
         thread.start()
         
         
@@ -639,9 +639,9 @@ class Window(tk.Tk):
         # this.setStopState(True)
         # this.stop = True
         this.stop.set()
-        this.removeProgressEvents()
-        
         # this.waitThreads()
+        # this.removeProgressEvents()
+        
         # time.sleep(1)
         
         logger.info('Safely stopped')
