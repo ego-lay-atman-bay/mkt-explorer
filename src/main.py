@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 def createLogger(type = 'console'):
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
-    format = '%(levelname)s: %(message)s'
+    format = '[%(levelname)s] %(message)s'
     datefmt = '%I:%M:%S %p'
     level = logging.DEBUG
 
@@ -47,7 +47,7 @@ def createLogger(type = 'console'):
             pass
         
         handlers.append(logging.FileHandler(filename))
-        format = '%(asctime)s %(levelname)s: %(message)s'
+        format = '[%(asctime)s] [%(levelname)s] %(message)s'
 
         # logging.basicConfig(filename=filename, filemode='w', format=format, datefmt=datefmt, level=level)
         # logger.info('logging file')
@@ -231,7 +231,8 @@ class Window(tk.Tk):
         this.protocol("WM_DELETE_WINDOW", this.close)
         
     def createStructurePage(this):
-        this.pages['structure']['contents']['treeview'] = ttk.Treeview(this.pages['structure']['frame'], show='tree')
+        this.pages['structure']['contents']['columns'] = ['file']
+        this.pages['structure']['contents']['treeview'] : ttk.Treeview = ttk.Treeview(this.pages['structure']['frame'], show='tree headings', columns = this.pages['structure']['contents']['columns'])
         this.pages['structure']['contents']['treeview'].pack(fill='both', expand=True)
         
         this.pages['structure']['contents']['scrollbar'] = ttk.Scrollbar(this.pages['structure']['contents']['treeview'], orient='vertical', command=this.pages['structure']['contents']['treeview'].yview)
@@ -239,8 +240,27 @@ class Window(tk.Tk):
         this.pages['structure']['contents']['treeview'].config(yscrollcommand=this.pages['structure']['contents']['scrollbar'].set)
         this.pages['structure']['contents']['scrollbar'].pack(fill='y', side='right')
         
+        columnWidth = 1
+        
+        this.pages['structure']['contents']['treeview'].heading('file', text='Filename', anchor='w')
+        this.pages['structure']['contents']['treeview'].column('file', width=columnWidth)
+        
+        def showPopup(event):
+            item = this.pages['structure']['contents']['treeview'].identify_row(event.y)
+            logger.info(f'clicked item: {item}')
+            
+            this.pages['structure']['contents']['popup'] = tk.Menu(this.pages['structure']['contents']['treeview'], tearoff=0)
+            this.pages['structure']['contents']['popup'].add_command(label = 'export', command = lambda : this.exportFile(this.pages['structure']['contents']['treeview'].item(item)['value']))
+            
+            try:
+                this.pages['structure']['contents']['popup'].tk_popup(event.x_root, event.y_root, 0)
+            finally:
+                this.pages['structure']['contents']['popup'].grab_release()
+            
+        this.pages['structure']['contents']['treeview'].bind("<Button-3>", showPopup)
+        
     def createEnvPage(this):
-        this.pages['env']['contents']['treeview'] = ttk.Treeview(this.pages['env']['frame'], show='tree')
+        this.pages['env']['contents']['treeview'] : ttk.Treeview = ttk.Treeview(this.pages['env']['frame'], show='tree')
         this.pages['env']['contents']['treeview'].pack(fill='both', expand=True)
         
         this.pages['env']['contents']['scrollbar'] = ttk.Scrollbar(this.pages['env']['contents']['treeview'], orient='vertical', command=this.pages['env']['contents']['treeview'].yview)
@@ -332,7 +352,17 @@ class Window(tk.Tk):
                 this.event_generate('<<UpdatePrimaryProgress>>')
                 # this.event_generate('<<UpdatePrimaryProgressText>>')
                 
-                newID = this.pages['structure']['contents']['treeview'].insert(id, 'end', text=d)
+                if hasattr(data[d], 'filename'):
+                    filename = data[d].filename
+                else:
+                    filename = ''
+                
+                newID = this.pages['structure']['contents']['treeview'].insert(
+                    id,
+                    'end',
+                    text=d,
+                    values = filename,
+                )
                 if isinstance(data[d], dict):
                     addToStructure(data[d], newID)
                 logger.debug(f'{data[d] = }\n{newID = }')
@@ -345,7 +375,12 @@ class Window(tk.Tk):
         return file
     
     def chooseCatalog(this):
-        file = filedialog.askopenfilename(title='Choose Catalog', defaultextension='*.csv', filetypes=((('Catalog file', '*.csv'), ('any', '*.*'), )))
+        file = filedialog.askopenfilename(
+            title='Choose Catalog',
+            defaultextension='*.csv',
+            filetypes=((('Catalog file', '*.csv'), ('any', '*.*'), )),
+            initialdir = os.path.dirname(this.settings['catalog']),
+        )
         this.loadCatalog(file)
         return file
     
@@ -362,6 +397,8 @@ class Window(tk.Tk):
             thread.start()
     
     def loadNabe(this):
+        start = time.time()
+        
         thread = threading.current_thread()
         # messagebox.showinfo('Start loading', 'Start loading nabe')
         
@@ -374,6 +411,7 @@ class Window(tk.Tk):
         this.progress['primary']['bar']['max'] = len(this.catalog)
         this.progress['primary']['event'] = "Loading nabe"
         this.event_generate('<<ResetPrimaryProgress>>')
+            
         
         for key,state,type,path in this.catalog:
             nabepath = pathlib.Path(path)
@@ -441,7 +479,12 @@ class Window(tk.Tk):
                 this.updateAssets()
         
                 this.updateStructure()
+                
         this.threads.discard(thread)
+        
+        end = time.time()
+        
+        logger.info(f'Completed in: {end - start}')
         
         # return True
     
@@ -472,7 +515,9 @@ class Window(tk.Tk):
                 parts = parts[1:]
             
             this.addToFilesystem(parts, file, data=this.fileStructure)
-            
+    
+    def exportFile(this, file):
+        logger.debug(file)
     
     def loadFile(this, path, container = None):
         logger.info(path)
@@ -495,7 +540,29 @@ class Window(tk.Tk):
             this.assets.append(asset)
         else:
             logger.info('loading Unity asset')
-            this.environment.load_file(path)
+            asset = this.environment.load_file(path)
+            
+            def getObjects(item):
+                ret = []
+                if not isinstance(item, UnityPy.Environment) and getattr(item, "objects", None):
+                    # serialized file
+                    return [val for val in item.objects.values()]
+
+                elif getattr(item, "files", None):  # WebBundle and BundleFile
+                    # bundle
+                    for item in item.files.values():
+                        ret.extend(getObjects(item))
+                    return ret
+
+                return ret
+            
+            logger.info(asset)
+            objects = getObjects(asset)
+            logger.info(f'{objects = }')
+            
+            for obj in objects:
+                obj.filename = os.path.basename(path)
+            
             logger.info('loaded Unity asset')
             # env = UnityPy.load(path)
             # this.assets = this.assets + env.objects
@@ -516,8 +583,14 @@ class Window(tk.Tk):
         this.progress['primary']['event'] = 'Extracting audio'
         # this.event_generate('<<UpdatePrimaryProgressText>>')
         
+        files = os.listdir(os.path.join(this.nabe, 'b'))
         
         for key,state,type,path in this.catalog:
+            try:
+                files.remove(os.path.basename(path))
+            except:
+                pass
+            
             nabepath = pathlib.Path(path)
             parts = nabepath.parts[2:]
             nabepath = pathlib.Path(this.nabe, *parts)
@@ -528,51 +601,63 @@ class Window(tk.Tk):
             
             # this.update()
             
-            if not parts or parts[0] != 'b':
-                continue
+            if parts and parts[0] == 'b':
             
-            file = os.path.basename(key)
-            name, type = os.path.splitext(file)
-            type = type[1:]
-            
-            if type != 'pck':
-                continue
-            
-            logger.info(f'exporting {file}')
-            
-            pckdestination = os.path.join(this.output, 'PCK', file)
-            os.makedirs(os.path.dirname(pckdestination), exist_ok=True)
-            try:
-                shutil.copy(nabepath, pckdestination)
-            except Exception as e:
-                logger.warning(f'unable to copy file {nabepath}')
-                logger.error(str(e))
-            
-            try:
-                object = WWiseAudio(nabepath)
-                # this.progress['secondary']['bar']['max'] = len(object.files)
-                this.progress['secondary']['progress'].set(0)
-                destination = os.path.join(this.output, 'WAV', name)
-                os.makedirs(destination, exist_ok=True)
-                object.extractAudio(destination)
+                file = os.path.basename(key)
+                name, type = os.path.splitext(file)
+                type = type[1:]
+
+                if type == 'pck':
                 
-                # for wem in object.files:
-                #     logger.info(f'  {os.path.splitext(wem.name)[0] + ".wav"}')
-                #     destination = os.path.join(this.output, 'WAV', name)
+                    logger.info(f'exporting {file}')
+
+                    pckdestination = os.path.join(this.output, 'PCK', file)
+                    os.makedirs(os.path.dirname(pckdestination), exist_ok=True)
+                    try:
+                        shutil.copy(nabepath, pckdestination)
+                    except Exception as e:
+                        logger.warning(f'unable to copy file {nabepath}')
+                        logger.error(str(e))
+
+                    try:
+                        destination = os.path.join(this.output, 'WAV', name)
+                        object = WWiseAudio(nabepath)
+                        # this.progress['secondary']['bar']['max'] = len(object.files)
+                        this.progress['secondary']['progress'].set(0)
+                        os.makedirs(destination, exist_ok=True)
+                        object.extractAudio(destination)
+
+                        # for wem in object.files:
+                        #     logger.info(f'  {os.path.splitext(wem.name)[0] + ".wav"}')
+                        #     destination = os.path.join(this.output, 'WAV', name)
+
+                        #     this.progress['secondary']['progress'].set(this.progress['secondary']['progress'].get() + 1)
+                        #     this.progress['secondary']['text_var'].set(wem.name)
+
+                        #     os.makedirs(destination, exist_ok=True)
+                        #     wem.read('wav')
+                        #     wem.export(os.path.join(destination, (os.path.splitext(wem.name)[0] + '.wav')))
+
+                    except Exception as e:
+                        logger.warning(f'unable to load WWise audio {nabepath}')
+                        logger.error(str(e))
                     
-                #     this.progress['secondary']['progress'].set(this.progress['secondary']['progress'].get() + 1)
-                #     this.progress['secondary']['text_var'].set(wem.name)
-                    
-                #     os.makedirs(destination, exist_ok=True)
-                #     wem.read('wav')
-                #     wem.export(os.path.join(destination, (os.path.splitext(wem.name)[0] + '.wav')))
-                 
-            except Exception as e:
-                logger.warning(f'unable to load WWise audio {nabepath}')
-                logger.error(str(e))
+                    try:
+                        if len(os.listdir(destination)) <= 0:
+                            shutil.rmtree(destination, ignore_errors=True)
+                    except:
+                        pass
                 
+                elif type == 'bytes':
+                    destination = os.path.join(this.output, 'PCK', file)
+                    os.makedirs(os.path.dirname(destination), exist_ok=True)
+                    try:
+                        shutil.copy(nabepath, destination)
+                    except:
+                        pass
+
             # this.progress['secondary']['text_var'].set('Done!')
-            
+
             if not this.stop.is_set():
                 this.progress['primary']['text'] = os.path.basename(key)
                 this.event_generate('<<UpdatePrimaryProgress>>')
@@ -581,6 +666,46 @@ class Window(tk.Tk):
                 break
         
         if not this.stop.is_set():
+            this.progress['primary']['bar']['max'] = len(files)
+            this.event_generate('<<ResetPrimaryProgress>>')
+            
+            logger.info(f'UNKNOWN: \n{files}')
+            for file in files:
+                pckdestination = os.path.join(this.output, 'UNKNOWN', file)
+                nabepath = os.path.join(this.nabe, 'b', file)
+                os.makedirs(os.path.dirname(pckdestination), exist_ok=True)
+                
+                try:
+                    shutil.copy(nabepath, pckdestination)
+                except Exception as e:
+                    logger.warning(f'unable to copy file {nabepath}')
+                    logger.error(str(e))
+                
+                try:
+                    object = WWiseAudio(nabepath)
+                    # this.progress['secondary']['bar']['max'] = len(object.files)
+                    # this.progress['secondary']['progress'].set(0)
+                    destination = os.path.join(this.output, 'UNKNOWN_EXTRACTED', file)
+                    os.makedirs(destination, exist_ok=True)
+                    object.extractAudio(destination)
+                    
+                except Exception as e:
+                    logger.warning(f'unable to load WWise audio {nabepath}')
+                    logger.error(str(e))
+                
+                try:
+                    if len(os.listdir(os.path.dirname(pckdestination))) <= 0:
+                        shutil.rmtree(os.path.dirname(pckdestination), ignore_errors=True)
+                except:
+                    pass
+                    
+                if not this.stop.is_set():
+                    this.progress['primary']['text'] = os.path.basename(key)
+                    this.event_generate('<<UpdatePrimaryProgress>>')
+                else:
+                    logger.debug(f'{this.stop = }')
+                    break
+            
             this.progress['primary']['text_var'].set('Done!')
 
         logger.info('Done!')
@@ -701,6 +826,8 @@ class Window(tk.Tk):
 def main():
     COUNT = threading.active_count()
     THREAD_LIMIT = COUNT + 7
+    
+    global app
     app = Window()
     app.mainloop()
     print('mainloop ended')
