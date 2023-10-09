@@ -154,3 +154,5 @@ cython_debug/
 tmp/
 src/tools/RavioliGameTools_v2.10.zip
 settings.json
+
+*.config
