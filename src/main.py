@@ -22,7 +22,7 @@ import lxml
 import UnityPy
 from lxml import etree
 
-from AssetTypes import WWiseAudio
+from assetTypes import WWiseAudio
 
 UnityPyVersion = '1.9.24'
 
