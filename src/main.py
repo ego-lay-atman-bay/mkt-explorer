@@ -1,5 +1,4 @@
 import csv
-import json
 import logging
 import os
 import pathlib
@@ -13,14 +12,10 @@ import tkinter.ttk as ttk
 from datetime import datetime
 from tkinter import messagebox
 from settings import Settings
-from zipfile import ZipFile
 import py7zr
 import tempfile
 
-import internetarchive as ia
-import lxml
 import UnityPy
-from lxml import etree
 
 from assetTypes import WWiseAudio
 
