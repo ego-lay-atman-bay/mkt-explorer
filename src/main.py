@@ -96,6 +96,7 @@ class Window(tk.Tk):
         this.files = []
         this.assets = []
         this.fileStructure = {}
+        this.fileStructureLength = 0
         this.environment = UnityPy.Environment()
         this.stop = threading.Event()
 
@@ -566,6 +567,10 @@ class Window(tk.Tk):
             # this.assets = this.assets + env.objects
 
         this.files.append(path)
+
+        this.updateAssets()
+        this.updateStructure()
+        this.updateEnv()
 
         # this.assets = objects
 
