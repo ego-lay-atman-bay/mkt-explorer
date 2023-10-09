@@ -19,7 +19,7 @@ import UnityPy
 
 from assetTypes import WWiseAudio
 
-UnityPyVersion = '1.9.24'
+UnityPyVersion = '1.10.3'
 
 if UnityPy.__version__ != UnityPyVersion:
     raise ImportError(f"Invalid UnityPy version detected. Please use version {UnityPyVersion}")
